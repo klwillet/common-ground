@@ -2978,7 +2978,7 @@ body.modal-open {
   }
 }
 
-@media (max-width: 420px) {
+@media (max-width: 340px) {
   .stats {
     grid-template-columns: 1fr;
   }
