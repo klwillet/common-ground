@@ -211,7 +211,6 @@ function shapeIssue(r) {
     id: r.id,
     title: r.title,
     description: r.description,
-    kind: r.kind,
     location: r.location,
     starts_at: r.starts_at,
     is_open: r.is_open,
@@ -336,7 +335,7 @@ const data = {
     const [p, iss, tks] = await Promise.all([
       sb.from('profiles').select(PROFILE_COLS).eq('id', id).maybeSingle(),
       sb.from('issues').select(ISSUE_LIST_SELECT).eq('owner_id', id),
-      sb.from('tasks').select('id,title,done,created_at, issue:issues!tasks_issue_fk(id,title,kind,is_open)').eq('owner_id', id),
+      sb.from('tasks').select('id,title,done,created_at, issue:issues!tasks_issue_fk(id,title,is_open)').eq('owner_id', id),
     ]);
     const member = must(p);
     if (!member) throw notFoundError('That member could not be found.');
@@ -483,8 +482,6 @@ function textarea({ label, name, value = '', placeholder = '', rows = 4, require
 
 /* ---------- Shared UI pieces ---------- */
 
-const kindPill = (kind) =>
-  `<span class="pill pill--${kind}">${icon(kind === 'event' ? 'calendar' : 'clipboard', 'icon--sm')}${kind === 'event' ? 'Event' : 'Project'}</span>`;
 
 const statusPill = (open) =>
   `<span class="status status--${open ? 'open' : 'closed'}"><i></i>${open ? 'Open' : 'Closed'}</span>`;
@@ -508,6 +505,108 @@ function contactLinks(m, cls = '') {
         ? `<a class="contact-link ${cls}" href="tel:${esc(m.phone.replace(/[^0-9+]/g, ''))}">${icon('phone')}<span>${esc(m.phone)}</span></a>`
         : `<span class="contact-link contact-link--none ${cls}">${icon('phone')}<span>No phone listed</span></span>`
     }`;
+}
+
+/* ---------- Cover art & confetti ---------- */
+
+const COVER_PALETTE = [
+    ['#ff7a59', '#ffb347', '#ff4f81'],
+    ['#f76b1c', '#fbbf24', '#f43f5e'],
+    ['#ff5e62', '#ff9966', '#ffd166'],
+    ['#ec4899', '#fb923c', '#facc15'],
+    ['#5b6cff', '#38bdf8', '#a78bfa'],
+    ['#4f46e5', '#22d3ee', '#818cf8'],
+    ['#2563eb', '#2dd4bf', '#c084fc'],
+    ['#7c3aed', '#60a5fa', '#34d399'],
+    ['#0ea5a4', '#84cc16', '#22d3ee'],
+    ['#db2777', '#8b5cf6', '#f472b6'],
+];
+const paletteFor = (seed) => COVER_PALETTE[(Number(seed) * 3) % COVER_PALETTE.length];
+const coverColor = (seed) => paletteFor(seed)[0];
+const monogram = (title) => esc((String(title).trim().match(/[\p{L}\p{N}]/u) || ['#'])[0].toUpperCase());
+let coverSeq = 0;
+
+/** Deterministic, playful SVG cover for an issue (same id → same art). */
+function coverArt(seed) {
+  let x = (Number(seed) * 2654435761) % 4294967296;
+  const rnd = () => ((x = (x * 1664525 + 1013904223) % 4294967296) / 4294967296);
+  const [a, b, c] = paletteFor(seed);
+  const id = `cv${++coverSeq}`;
+  const blob = (cx, cy, r, fill, op) => `<circle cx="${cx.toFixed(0)}" cy="${cy.toFixed(0)}" r="${r.toFixed(0)}" fill="${fill}" opacity="${op}"/>`;
+  const dots = Array.from({ length: 14 }, () => `<circle cx="${(rnd() * 400).toFixed(0)}" cy="${(rnd() * 160).toFixed(0)}" r="${(1.5 + rnd() * 2.5).toFixed(1)}" fill="#fff" opacity="${(0.35 + rnd() * 0.45).toFixed(2)}"/>`).join('');
+  const w1 = 95 + rnd() * 30;
+  const w2 = 70 + rnd() * 50;
+  const w3 = 120 + rnd() * 30;
+  return `<svg class="cover-art" viewBox="0 0 400 160" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient>
+      <filter id="${id}b"><feGaussianBlur stdDeviation="18"/></filter>
+    </defs>
+    <rect width="400" height="160" fill="url(#${id})"/>
+    <g filter="url(#${id}b)">
+      ${blob(rnd() * 400, rnd() * 160, 60 + rnd() * 40, c, 0.85)}
+      ${blob(rnd() * 400, rnd() * 160, 50 + rnd() * 40, '#ffffff', 0.35)}
+    </g>
+    <circle cx="${(260 + rnd() * 120).toFixed(0)}" cy="${(rnd() * 60).toFixed(0)}" r="${(34 + rnd() * 26).toFixed(0)}" fill="none" stroke="#fff" stroke-opacity=".38" stroke-width="10"/>
+    ${blob(40 + rnd() * 120, 120 + rnd() * 50, 26 + rnd() * 20, '#ffffff', 0.18)}
+    <path d="M0 ${w1.toFixed(0)} C 110 ${w2.toFixed(0)}, 230 ${w3.toFixed(0)}, 400 ${(w1 - 20).toFixed(0)} L400 160 L0 160Z" fill="#fff" opacity=".16"/>
+    <path d="M0 ${(w1 + 26).toFixed(0)} C 140 ${(w3 - 10).toFixed(0)}, 250 ${(w2 + 40).toFixed(0)}, 400 ${(w1 + 14).toFixed(0)} L400 160 L0 160Z" fill="#000" opacity=".07"/>
+    ${dots}
+  </svg>`;
+}
+
+/** Lightweight confetti burst from a screen point. */
+function confetti(x, y, count = 90) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const canvas = document.createElement('canvas');
+  canvas.className = 'confetti';
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = innerWidth * dpr;
+  canvas.height = innerHeight * dpr;
+  document.body.append(canvas);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const colors = ['#ff6b4a', '#ffb347', '#2fbf8f', '#5b6cff', '#ff4f81', '#facc15', '#38bdf8'];
+  const parts = Array.from({ length: count }, () => {
+    const ang = Math.random() * Math.PI * 2;
+    const sp = 4 + Math.random() * 8;
+    return {
+      x, y,
+      vx: Math.cos(ang) * sp,
+      vy: Math.sin(ang) * sp - 6,
+      w: 6 + Math.random() * 6,
+      h: 8 + Math.random() * 8,
+      r: Math.random() * Math.PI,
+      vr: (Math.random() - 0.5) * 0.4,
+      c: colors[(Math.random() * colors.length) | 0],
+      round: Math.random() < 0.3,
+    };
+  });
+  const start = performance.now();
+  (function frame(now) {
+    const t = now - start;
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    for (const p of parts) {
+      p.vy += 0.32;
+      p.vx *= 0.985;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.r += p.vr;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, 1 - t / 1700);
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.r);
+      ctx.fillStyle = p.c;
+      if (p.round) {
+        ctx.beginPath();
+        ctx.arc(0, 0, p.w / 2, 0, Math.PI * 2);
+        ctx.fill();
+      } else ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    }
+    if (t < 1700) requestAnimationFrame(frame);
+    else canvas.remove();
+  })(start);
 }
 
 /* ==========================================================================
@@ -571,7 +670,7 @@ function renderShell(section) {
     app.innerHTML = `
       <header class="topbar" id="topbar"></header>
       <main id="view" class="container view" tabindex="-1"></main>
-      <footer class="site-foot container">${LOGO}<span>Common Ground · built for neighbors who show up</span></footer>`;
+      <footer class="site-foot container">${LOGO}<span>Common Ground · built for communities that show up</span></footer>`;
   }
   const me = state.me;
   const active = (s) => (section === s ? 'is-active' : '');
@@ -628,12 +727,12 @@ function renderAuth() {
       <section class="auth__hero">
         <a class="brand brand--light" href="#/">${LOGO}<span class="brand__name">Common Ground</span></a>
         <div class="auth__pitch">
-          <h1>Where neighbors <em>show up</em> for each other.</h1>
+          <h1>Where your community <em>shows up</em> for each other.</h1>
           <p>Plan potlucks, park cleanups and community projects in one place. See who’s bringing what, claim a task, and keep the conversation going.</p>
         </div>
         <div class="auth__cards" aria-hidden="true">
-          ${floatCard({ name: 'John Okafor', color: '#e07a4f' }, 'I’ll bring the chips', 'Fall Neighborhood Potluck', false, '-2.5deg', '0s', '0px')}
-          ${floatCard({ name: 'Jane Alvarez', color: '#2f6f5e' }, 'I’ll bring the sodas', 'Fall Neighborhood Potluck', false, '1.5deg', '-2s', '36px')}
+          ${floatCard({ name: 'John Okafor', color: '#e07a4f' }, 'I’ll bring the chips', 'Fall Community Potluck', false, '-2.5deg', '0s', '0px')}
+          ${floatCard({ name: 'Jane Alvarez', color: '#2f6f5e' }, 'I’ll bring the sodas', 'Fall Community Potluck', false, '1.5deg', '-2s', '36px')}
           ${floatCard({ name: 'Marcus Lee', color: '#c2577a' }, 'Truck to haul bags to the dump', 'Saturday Park Cleanup', true, '-1deg', '-4s', '12px')}
         </div>
       </section>
@@ -678,7 +777,7 @@ function loginForm() {
 
 function signupForm() {
   return `
-    <h2>Join your neighbors</h2>
+    <h2>Join your community</h2>
     <p class="lead">Create an account to organize issues and pitch in on tasks.</p>
     <form class="auth-form" data-form="signup">
       ${field({ label: 'Full name', name: 'name', required: true, placeholder: 'Jane Alvarez', attrs: 'autocomplete="name" maxlength="80"' })}
@@ -728,7 +827,7 @@ function drawIssues() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   })();
   const nextEvent = open
-    .filter((i) => i.kind === 'event' && i.starts_at && i.starts_at.slice(0, 10) >= todayKey)
+    .filter((i) => i.starts_at && i.starts_at.slice(0, 10) >= todayKey)
     .sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0];
 
   const filters = [
@@ -739,39 +838,41 @@ function drawIssues() {
   ];
 
   view.innerHTML = `
-    <section class="page-head">
-      <div>
-        <p class="eyebrow">${greeting()}, ${esc(firstName(state.me.name))}</p>
-        <h1 class="display">What’s happening in the neighborhood</h1>
-        <p class="muted">Events and projects your community is working on. Jump in wherever you can help.</p>
+    <section class="hero">
+      <div class="hero__orbs" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div class="hero__grid">
+        <div class="hero__content">
+          <p class="hero__eyebrow">${greeting()}, ${esc(firstName(state.me.name))} <span class="wave" aria-hidden="true">👋</span></p>
+          <h1 class="hero__title">What’s happening in your <em>community</em></h1>
+          <p class="hero__sub">Everything your community is working on, big or small. Jump in wherever you can help.</p>
+          <button class="btn btn--accent btn--lg" data-action="new-issue">${icon('plus')} New issue</button>
+        </div>
+        <div class="hero__stats" aria-label="Community at a glance">
+          <div class="stat">
+            <span class="stat__icon stat__icon--brand">${icon('grid')}</span>
+            <div><div class="stat__value">${counts.open}</div><div class="stat__label">Open issues</div></div>
+          </div>
+          <div class="stat">
+            <span class="stat__icon stat__icon--accent">${icon('check')}</span>
+            <div><div class="stat__value">${state.stats.my_open_tasks}</div><div class="stat__label">Tasks on your plate</div></div>
+          </div>
+          <a class="stat" href="#/members">
+            <span class="stat__icon stat__icon--project">${icon('users')}</span>
+            <div><div class="stat__value">${state.stats.members}</div><div class="stat__label">Members</div></div>
+          </a>
+          ${
+            nextEvent
+              ? `<a class="stat" href="#/issues/${nextEvent.id}">
+                   <span class="stat__icon stat__icon--event">${icon('calendar')}</span>
+                   <div class="min0"><div class="stat__value stat__value--sm">${esc(relativeDay(nextEvent.starts_at))}</div><div class="stat__label">Next: ${esc(nextEvent.title)}</div></div>
+                 </a>`
+              : `<div class="stat">
+                   <span class="stat__icon stat__icon--event">${icon('calendar')}</span>
+                   <div><div class="stat__value stat__value--sm">Nothing yet</div><div class="stat__label">Nothing scheduled</div></div>
+                 </div>`
+          }
+        </div>
       </div>
-      <button class="btn btn--primary btn--lg" data-action="new-issue">${icon('plus')} New issue</button>
-    </section>
-
-    <section class="stats" aria-label="Community at a glance">
-      <div class="stat">
-        <span class="stat__icon">${icon('grid')}</span>
-        <div><div class="stat__value">${counts.open}</div><div class="stat__label">Open issues</div></div>
-      </div>
-      <div class="stat">
-        <span class="stat__icon stat__icon--accent">${icon('check')}</span>
-        <div><div class="stat__value">${state.stats.my_open_tasks}</div><div class="stat__label">Tasks on your plate</div></div>
-      </div>
-      <a class="stat" href="#/members">
-        <span class="stat__icon stat__icon--project">${icon('users')}</span>
-        <div><div class="stat__value">${state.stats.members}</div><div class="stat__label">Community members</div></div>
-      </a>
-      ${
-        nextEvent
-          ? `<a class="stat stat--next" href="#/issues/${nextEvent.id}">
-               <span class="stat__icon stat__icon--event">${icon('calendar')}</span>
-               <div class="min0"><div class="stat__value stat__value--sm">${esc(relativeDay(nextEvent.starts_at))}</div><div class="stat__label">Next up: ${esc(nextEvent.title)}</div></div>
-             </a>`
-          : `<div class="stat">
-               <span class="stat__icon stat__icon--event">${icon('calendar')}</span>
-               <div><div class="stat__value stat__value--sm">Nothing yet</div><div class="stat__label">No upcoming events</div></div>
-             </div>`
-      }
     </section>
 
     <div class="toolbar">
@@ -803,46 +904,51 @@ function drawIssueGrid() {
     host.innerHTML = q
       ? emptyState({ iconName: 'search', title: 'No matches', text: `Nothing matches “${esc(q)}” here. Try another word, or check the other tabs.` })
       : {
-          open: emptyState({ iconName: 'sparkle', title: 'No open issues', text: 'Everything is wrapped up. Got an idea for the neighborhood?', action: `<button class="btn btn--primary" data-action="new-issue">${icon('plus')} Start an issue</button>` }),
+          open: emptyState({ iconName: 'sparkle', title: 'No open issues', text: 'Everything is wrapped up. Got an idea for the community?', action: `<button class="btn btn--primary" data-action="new-issue">${icon('plus')} Start an issue</button>` }),
           mine: emptyState({ iconName: 'user', title: 'You’re not involved in anything yet', text: 'Pick an open issue and add a task, or start your own.', action: `<button class="btn btn--secondary" data-action="set-filter" data-filter="open">Browse open issues</button>` }),
           closed: emptyState({ iconName: 'lock', title: 'No closed issues', text: 'Issues show up here once their organizer marks them as done.' }),
-          all: emptyState({ iconName: 'sparkle', title: 'No issues yet', text: 'Be the first to rally the neighborhood.', action: `<button class="btn btn--primary" data-action="new-issue">${icon('plus')} Start an issue</button>` }),
+          all: emptyState({ iconName: 'sparkle', title: 'No issues yet', text: 'Be the first to rally the community.', action: `<button class="btn btn--primary" data-action="new-issue">${icon('plus')} Start an issue</button>` }),
         }[state.issueFilter];
     return;
   }
   host.innerHTML = `<div class="issue-grid">${list.map(issueCard).join('')}</div>`;
 }
 
-function issueCard(i) {
+function issueCard(i, idx = 0) {
   const pct = i.task_count ? Math.round((i.done_count / i.task_count) * 100) : 0;
   const when = parseLocal(i.starts_at)?.date;
   const mine = i.owner.id === state.me.id;
   return `
-    <a class="issue-card kind-${i.kind} ${i.is_open ? '' : 'is-closed'}" href="#/issues/${i.id}">
-      <div class="issue-card__head">
-        <div class="pills">${kindPill(i.kind)}${statusPill(i.is_open)}</div>
+    <a class="issue-card ${i.is_open ? '' : 'is-closed'}" href="#/issues/${i.id}" style="animation-delay:${Math.min(idx, 8) * 50}ms;--k:${coverColor(i.id)}">
+      <div class="issue-card__cover">
+        ${coverArt(i.id)}
+        <span class="cover-badge">${monogram(i.title)}</span>
         ${when ? `<div class="date-tile" aria-hidden="true"><span>${when.toLocaleDateString(undefined, { month: 'short' })}</span><strong>${when.getDate()}</strong></div>` : ''}
+        ${i.is_open ? '' : `<span class="cover-closed">${icon('lock', 'icon--sm')} Closed</span>`}
       </div>
-      <h3 class="issue-card__title">${esc(i.title)}</h3>
-      ${i.description ? `<p class="issue-card__desc">${esc(i.description)}</p>` : ''}
-      ${
-        i.starts_at || i.location
-          ? `<ul class="meta">
-              ${i.starts_at ? `<li>${icon('calendar')}<span>${esc(formatWhen(i.starts_at))}</span></li>` : ''}
-              ${i.location ? `<li>${icon('pin')}<span>${esc(i.location)}</span></li>` : ''}
-            </ul>`
-          : ''
-      }
-      <div>
-        <div class="progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="Tasks done"><span style="width:${pct}%"></span></div>
-        <span class="progress-label">${i.task_count ? `${i.done_count} of ${plural(i.task_count, 'task')} done` : i.is_open ? 'No tasks yet. Be the first to pitch in.' : 'No tasks'}</span>
-      </div>
-      <div class="issue-card__foot">
-        <span class="by">${avatar(i.owner, 'xs')}<span>${mine ? 'Organized by you' : `by ${esc(i.owner.name)}`}</span></span>
-        <span class="foot-right">
-          ${i.comment_count ? `<span class="mini-count" title="${plural(i.comment_count, 'comment')}">${icon('message', 'icon--sm')}${i.comment_count}</span>` : ''}
-          ${avatarStack(i.contributors)}
-        </span>
+      <div class="issue-card__body">
+        <div class="pills">${statusPill(i.is_open)}</div>
+        <h3 class="issue-card__title">${esc(i.title)}</h3>
+        ${i.description ? `<p class="issue-card__desc">${esc(i.description)}</p>` : ''}
+        ${
+          i.starts_at || i.location
+            ? `<ul class="meta">
+                ${i.starts_at ? `<li>${icon('calendar')}<span>${esc(formatWhen(i.starts_at))}</span></li>` : ''}
+                ${i.location ? `<li>${icon('pin')}<span>${esc(i.location)}</span></li>` : ''}
+              </ul>`
+            : ''
+        }
+        <div>
+          <div class="progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="Tasks done"><span style="width:${pct}%"></span></div>
+          <span class="progress-label">${i.task_count ? `<strong>${i.done_count}</strong> of ${plural(i.task_count, 'task')} done` : i.is_open ? 'No tasks yet. Be the first to pitch in!' : 'No tasks'}</span>
+        </div>
+        <div class="issue-card__foot">
+          <span class="by">${avatar(i.owner, 'xs')}<span>${mine ? 'Organized by you' : `by ${esc(i.owner.name)}`}</span></span>
+          <span class="foot-right">
+            ${i.comment_count ? `<span class="mini-count" title="${plural(i.comment_count, 'comment')}">${icon('message', 'icon--sm')}${i.comment_count}</span>` : ''}
+            ${avatarStack(i.contributors)}
+          </span>
+        </div>
       </div>
     </a>`;
 }
@@ -889,11 +995,11 @@ function drawIssue() {
     <a class="back" href="#/">${icon('arrowLeft', 'icon--sm')} All issues</a>
     <div class="issue-layout">
       <div class="issue-main">
-        <article class="issue-hero kind-${issue.kind} ${issue.is_open ? '' : 'is-closed'}">
-          <div class="issue-hero__band"></div>
+        <article class="issue-hero ${issue.is_open ? '' : 'is-closed'}" style="--k:${coverColor(issue.id)}">
+          <div class="issue-hero__band">${coverArt(issue.id)}<span class="cover-badge cover-badge--lg">${monogram(issue.title)}</span></div>
           <div class="issue-hero__body">
             <div class="issue-hero__top">
-              <div class="pills">${kindPill(issue.kind)}${isOwner ? '' : statusPill(issue.is_open)}</div>
+              <div class="pills">${statusPill(issue.is_open)}</div>
               ${
                 isOwner
                   ? `<div class="owner-controls">
@@ -929,7 +1035,7 @@ function drawIssue() {
 
         <section class="section">
           <div class="section-head">
-            <h2 class="section-title">Tasks <span class="count">${tasks.length}</span></h2>
+            <h2 class="section-title"><span class="title-badge">${icon('check')}</span>Tasks <span class="count">${tasks.length}</span></h2>
             ${
               tasks.length
                 ? `<div class="progress-inline"><div class="progress"><span style="width:${pct}%"></span></div><span>${done}/${tasks.length} done</span></div>`
@@ -1015,7 +1121,7 @@ function taskHTML(t, issue) {
     : `<span class="check check--static ${t.done ? 'is-checked' : ''}" title="${t.done ? 'Done' : 'Not done yet'}">${icon('check')}</span>`;
 
   return `
-    <li class="task ${t.done ? 'is-done' : ''} ${showComments ? 'has-comments-open' : ''}" id="task-${t.id}">
+    <li class="task ${t.done ? 'is-done' : ''} ${showComments ? 'has-comments-open' : ''}" id="task-${t.id}" style="--oc:${esc(t.owner.color)}">
       <div class="task__row">
         ${check}
         <div class="task__body">
@@ -1098,31 +1204,19 @@ function commentHTML(c) {
 }
 
 function issueModal(existing) {
-  const i = existing || { title: '', description: '', kind: 'event', location: '', starts_at: '' };
+  const i = existing || { title: '', description: '', location: '', starts_at: '' };
   const [date = '', time = ''] = (i.starts_at || '').split('T');
   openModal({
     title: existing ? 'Edit issue' : 'Start a new issue',
-    subtitle: existing ? '' : 'Rally your neighbors around an event or a project.',
+    subtitle: existing ? '' : 'Anything your community wants to get done: a gathering, a fundraiser, a project, a question.',
     submitLabel: existing ? 'Save changes' : 'Create issue',
     body: `
-      <div class="kind-picker" role="radiogroup" aria-label="Type">
-        ${['event', 'project']
-          .map(
-            (k) => `
-          <label class="kind-option kind-${k}">
-            <input type="radio" name="kind" value="${k}" ${i.kind === k ? 'checked' : ''}>
-            <span class="kind-option__icon">${icon(k === 'event' ? 'calendar' : 'clipboard')}</span>
-            <span><strong>${k === 'event' ? 'Event' : 'Project'}</strong><small>${k === 'event' ? 'A gathering on a specific day' : 'Work we tackle together over time'}</small></span>
-          </label>`
-          )
-          .join('')}
-      </div>
-      ${field({ label: 'Title', name: 'title', value: i.title, required: true, placeholder: 'e.g. Fall Neighborhood Potluck', attrs: 'maxlength="120"' })}
+      ${field({ label: 'Title', name: 'title', value: i.title, required: true, placeholder: 'e.g. Spring fundraiser, Study group, Team potluck', attrs: 'maxlength="120"' })}
       <div class="field-row">
         ${field({ label: 'Date', name: 'date', type: 'date', value: date })}
         ${field({ label: 'Time', name: 'time', type: 'time', value: time })}
       </div>
-      ${field({ label: 'Location', name: 'location', value: i.location, placeholder: 'e.g. Maple Park Pavilion', attrs: 'maxlength="160"' })}
+      ${field({ label: 'Location', name: 'location', value: i.location, placeholder: 'e.g. Room 204, Zoom, Central Park', attrs: 'maxlength="160"' })}
       ${textarea({ label: 'Description', name: 'description', value: i.description, placeholder: 'What is it, and how can people help?', rows: 5, attrs: 'maxlength="4000"' })}
     `,
     async onSubmit(fd) {
@@ -1131,7 +1225,6 @@ function issueModal(existing) {
       if (t && !d) throw new Error('Add a date to go with the time.');
       const payload = {
         title: String(fd.get('title')).trim(),
-        kind: fd.get('kind'),
         starts_at: d ? (t ? `${d}T${t}` : d) : null,
         location: String(fd.get('location')).trim(),
         description: String(fd.get('description')).trim(),
@@ -1146,6 +1239,7 @@ function issueModal(existing) {
         state.issues = null;
         location.hash = `#/issues/${created.id}`;
         toast('Issue created. Now add some tasks!');
+        confetti(window.innerWidth / 2, window.innerHeight / 3, 140);
       }
     },
   });
@@ -1161,17 +1255,20 @@ async function MembersPage(view, seq) {
   if (seq !== renderSeq) return;
   state.members = members;
   view.innerHTML = `
-    <section class="page-head">
+    <section class="hero hero--compact">
+      <div class="hero__orbs" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div class="hero__row">
       <div>
-        <p class="eyebrow">Directory</p>
-        <h1 class="display">Your neighbors</h1>
-        <p class="muted">${plural(members.length, 'member')} on Common Ground. Reach out, say hi, coordinate.</p>
+        <p class="hero__eyebrow">Directory</p>
+        <h1 class="hero__title">Your <em>community</em></h1>
+        <p class="hero__sub">${plural(members.length, 'member')} on Common Ground. Reach out, say hi, coordinate.</p>
       </div>
       <label class="search search--wide">
         ${icon('search')}
         <span class="sr-only">Search members</span>
         <input class="input" type="search" placeholder="Search by name, email or phone…" value="${esc(state.memberQuery)}" data-input="member-search">
       </label>
+      </div>
     </section>
     <div id="member-grid"></div>`;
   drawMemberGrid();
@@ -1191,7 +1288,8 @@ function memberCard(m, { preview = false } = {}) {
   const isMe = m.id === state.me.id;
   const Top = preview ? 'div' : 'a';
   return `
-    <article class="member-card">
+    <article class="member-card" style="--c:${esc(m.color)}">
+      <div class="member-card__cover" aria-hidden="true"></div>
       <${Top} class="member-card__top" ${preview ? '' : `href="#/members/${m.id}"`}>
         ${avatar(m, 'lg')}
         <div class="min0">
@@ -1242,8 +1340,8 @@ async function MemberPage(view, seq, id) {
                 .map(
                   (i) => `
               <li><a class="row-item" href="#/issues/${i.id}">
-                <span class="dot dot--${i.kind}"></span>
-                <span class="row-item__main"><span class="row-item__title">${esc(i.title)}</span><span class="row-item__sub">${i.kind === 'event' ? 'Event' : 'Project'}${i.starts_at ? ` · ${esc(formatWhen(i.starts_at))}` : ''} · ${plural(i.task_count, 'task')}</span></span>
+                <span class="dot" style="background:${coverColor(i.id)}"></span>
+                <span class="row-item__main"><span class="row-item__title">${esc(i.title)}</span><span class="row-item__sub">${i.starts_at ? `${esc(formatWhen(i.starts_at))} · ` : ''}${plural(i.task_count, 'task')}</span></span>
                 ${statusPill(i.is_open)}
               </a></li>`
                 )
@@ -1277,11 +1375,12 @@ async function MemberPage(view, seq, id) {
 function ProfilePage(view) {
   const me = state.me;
   view.innerHTML = `
-    <section class="page-head">
+    <section class="hero hero--compact">
+      <div class="hero__orbs" aria-hidden="true"><span></span><span></span><span></span></div>
       <div>
-        <p class="eyebrow">Your account</p>
-        <h1 class="display">Profile &amp; settings</h1>
-        <p class="muted">Your name, email and phone number are visible to other members so neighbors can reach you.</p>
+        <p class="hero__eyebrow">Your account</p>
+        <h1 class="hero__title">Profile &amp; <em>settings</em></h1>
+        <p class="hero__sub">Your name, email and phone number are visible to other members so people can reach you.</p>
       </div>
     </section>
     <div class="profile-layout">
@@ -1408,8 +1507,10 @@ const actions = {
   'toggle-done': async (el) => {
     const t = findTask(Number(el.dataset.id));
     if (!t) return;
+    const rect = el.getBoundingClientRect();
     t.done = !t.done; // optimistic
     drawIssue();
+    if (t.done) confetti(rect.left + rect.width / 2, rect.top + rect.height / 2);
     try {
       await data.updateTask(t.id, { done: t.done });
     } catch (err) {
@@ -1580,6 +1681,7 @@ const forms = {
 const changes = {
   async 'toggle-open'(el) {
     const open = el.checked;
+    const rect = el.closest('.switch').getBoundingClientRect();
     el.disabled = true;
     try {
       await data.updateIssue(state.issue.issue.id, { is_open: open });
@@ -1590,6 +1692,7 @@ const changes = {
     }
     state.issues = null;
     await reloadIssue();
+    if (!open) confetti(rect.left + rect.width / 2, rect.top + rect.height / 2, 160);
     toast(open ? 'Issue reopened' : 'Issue closed. Nice work, everyone!');
   },
 };

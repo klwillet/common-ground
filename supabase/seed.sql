@@ -48,8 +48,8 @@ begin
     bio = 'Retired carpenter. I fix swings, fences and the occasional bike.' where id = tom;
 
   -- 1. Potluck
-  insert into public.issues (owner_id, title, kind, location, starts_at, is_open, created_at, updated_at, description)
-  values (jane, 'Fall Neighborhood Potluck', 'event', 'Maple Park Pavilion',
+  insert into public.issues (owner_id, title, location, starts_at, is_open, created_at, updated_at, description)
+  values (jane, 'Fall Community Potluck', 'Maple Park Pavilion',
           to_char(now() + interval '10 days', d) || 'T17:00', true, now() - interval '72 hours', now() - interval '72 hours',
           E'Our fall potluck is back! Bring a dish to share, a chair if you have one, and your appetite.\n\nAdd a task below to tell everyone what you’re bringing so we don’t end up with six bowls of potato salad.')
   returning id into i_potluck;
@@ -76,8 +76,8 @@ begin
   values (i_potluck, ben, 'Paper plates, cups and napkins', now() - interval '5 hours', now() - interval '5 hours');
 
   -- 2. Park cleanup
-  insert into public.issues (owner_id, title, kind, location, starts_at, is_open, created_at, updated_at, description)
-  values (marcus, 'Saturday Park Cleanup', 'event', 'Riverside Park, north entrance',
+  insert into public.issues (owner_id, title, location, starts_at, is_open, created_at, updated_at, description)
+  values (marcus, 'Saturday Park Cleanup', 'Riverside Park, north entrance',
           to_char(now() + interval '4 days', d) || 'T09:00', true, now() - interval '120 hours', now() - interval '120 hours',
           'Let’s get Riverside Park looking great before winter. We’ll meet at the north entrance and split into teams. Kids welcome!')
   returning id into i_cleanup;
@@ -96,8 +96,8 @@ begin
     (t, marcus, 'Legend.', now() - interval '47 hours', now() - interval '47 hours');
 
   -- 3. Garden (project, no date)
-  insert into public.issues (owner_id, title, kind, location, starts_at, is_open, created_at, updated_at, description)
-  values (priya, 'Community Garden: Winter Prep', 'project', 'Oak St. Community Garden', null, true,
+  insert into public.issues (owner_id, title, location, starts_at, is_open, created_at, updated_at, description)
+  values (priya, 'Community Garden: Winter Prep', 'Oak St. Community Garden', null, true,
           now() - interval '300 hours', now() - interval '300 hours',
           'Putting the garden to bed for the winter. Pick a job below and finish it any time before the first hard frost.')
   returning id into i_garden;
@@ -115,8 +115,8 @@ begin
   values (i_garden, aisha, 'Drain and store the hoses', now() - interval '40 hours', now() - interval '40 hours');
 
   -- 4. Coat drive
-  insert into public.issues (owner_id, title, kind, location, starts_at, is_open, created_at, updated_at, description)
-  values (aisha, 'Winter Coat Drive', 'project', 'Lincoln Library lobby', to_char(now() + interval '21 days', d), true,
+  insert into public.issues (owner_id, title, location, starts_at, is_open, created_at, updated_at, description)
+  values (aisha, 'Winter Coat Drive', 'Lincoln Library lobby', to_char(now() + interval '21 days', d), true,
           now() - interval '200 hours', now() - interval '200 hours',
           'Collecting gently used coats, hats and gloves for families who need them this winter. The drop-off bin is in the library lobby through the end of the month.')
   returning id into i_coats;
@@ -131,8 +131,8 @@ begin
   values (i_coats, sofia, 'Will wash and sort everything before delivery', now() - interval '20 hours', now() - interval '20 hours');
 
   -- 5. A closed project
-  insert into public.issues (owner_id, title, kind, location, starts_at, is_open, created_at, updated_at, description)
-  values (tom, 'Fix the Playground Swing', 'project', 'Maple Park playground', null, false,
+  insert into public.issues (owner_id, title, location, starts_at, is_open, created_at, updated_at, description)
+  values (tom, 'Fix the Playground Swing', 'Maple Park playground', null, false,
           now() - interval '700 hours', now() - interval '700 hours',
           'The left swing at Maple Park has a rusted chain and a cracked seat. Let’s fix it before someone gets hurt.')
   returning id into i_swing;

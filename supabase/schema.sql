@@ -34,7 +34,6 @@ create table if not exists public.issues (
               constraint issues_owner_fk references public.profiles (id) on delete cascade,
   title       text not null check (char_length(trim(title)) between 1 and 120),
   description text not null default '' check (char_length(description) <= 4000),
-  kind        text not null default 'event' check (kind in ('event', 'project')),
   location    text not null default '' check (char_length(location) <= 160),
   starts_at   text check (starts_at is null or starts_at ~ '^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$'),
   is_open     boolean not null default true,
@@ -62,6 +61,9 @@ create table if not exists public.comments (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Issues are open-ended (no event/project type). Drop the old column if present.
+alter table public.issues drop column if exists kind;
 
 create index if not exists issues_owner_idx    on public.issues (owner_id);
 create index if not exists tasks_issue_idx     on public.tasks (issue_id);
@@ -126,8 +128,8 @@ grant select on public.profiles, public.issues, public.tasks, public.comments to
 
 grant update (name, email, phone, bio, color) on public.profiles to authenticated;
 
-grant insert (title, description, kind, location, starts_at) on public.issues to authenticated;
-grant update (title, description, kind, location, starts_at, is_open) on public.issues to authenticated;
+grant insert (title, description, location, starts_at) on public.issues to authenticated;
+grant update (title, description, location, starts_at, is_open) on public.issues to authenticated;
 -- No DELETE on issues: issues are never deleted, only closed (is_open = false).
 
 grant insert (issue_id, title) on public.tasks to authenticated;

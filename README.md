@@ -1,6 +1,6 @@
 # Common Ground
 
-A Progressive Web App where a community shares member contact info, organizes **issues** (events and projects), claims **tasks**, and **comments** on tasks.
+A Progressive Web App where a community shares member contact info, organizes open-ended **issues** (anything the community wants to get done), claims **tasks**, and **comments** on tasks.
 
 Static front end on GitHub Pages, with Supabase (Postgres + Auth) as the backend.
 
@@ -8,7 +8,7 @@ Static front end on GitHub Pages, with Supabase (Postgres + Auth) as the backend
 
 - **Accounts:** sign up and log in with email and password. Emails are unique (enforced by Supabase Auth).
 - **Members:** a directory of every member's name, email, phone and bio. You can edit only your own profile.
-- **Issues:** events or projects with a date, location and description. Only the organizer can edit an issue. Issues are never deleted. The organizer switches them to **Closed** when they're over, and closed issues stop accepting new tasks.
+- **Issues:** open-ended: a title plus an optional date, location and description. Only the organizer can edit an issue. Issues are never deleted. The organizer switches them to **Closed** when they're over, and closed issues stop accepting new tasks.
 - **Tasks:** each task belongs to the member who added it (e.g. *"I'll bring the chips"*). Only that member can edit it, check it off or delete it.
 - **Comments:** comments exist on tasks only. Only the author can edit or delete a comment.
 - **PWA:** the app is installable, has an offline app shell via a service worker, and works on phones in light or dark mode.
