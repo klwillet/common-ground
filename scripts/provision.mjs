@@ -179,7 +179,7 @@ async function main() {
   // 7. Client config (the anon key is public by design; RLS protects the data)
   await writeFile(
     join(ROOT, 'config.js'),
-    `// Public Supabase settings. The anon key is safe to ship to browsers:\n// all data access is enforced by row-level security (see supabase/schema.sql).\nexport const SUPABASE_URL = '${url}';\nexport const SUPABASE_ANON_KEY = '${anon}';\n`
+    `// Public Supabase settings. The anon key is safe to ship to browsers:\n// all data access is enforced by row-level security (see supabase/schema.sql).\nwindow.CG_CONFIG = {\n  SUPABASE_URL: '${url}',\n  SUPABASE_ANON_KEY: '${anon}',\n};\n`
   );
   log(`Wrote config.js for ${url}`);
   console.log('\n✅ Supabase is ready.');

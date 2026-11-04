@@ -3,7 +3,7 @@
  * - Pinned CDN assets (supabase-js, fonts): cache-first.
  * - Supabase API/auth traffic: never cached; always goes to the network.
  */
-const VERSION = 'cg-v2';
+const VERSION = 'cg-v3';
 const SHELL = [
   './',
   './index.html',
